@@ -28,8 +28,8 @@ fn switch(routes: Route) -> Html {
 fn home() -> Html {
     html! {
         <>
-            <a href="/image-generator">{"牌姿生成"}</a> <br/>
-            <a href="/shanten-calculator">{"シャンテン数計算"}</a>
+            <a href="/shanten_count/image-generator">{"牌姿生成"}</a> <br/>
+            <a href="/shanten_count/shanten-calculator">{"シャンテン数計算"}</a>
         </>
     }
 }
@@ -184,11 +184,11 @@ fn shanten_calculator() -> Html {
 
 #[derive(Routable, Clone, PartialEq)]
 enum Route {
-    #[at("/image-generator")]
+    #[at("/shanten_count/image-generator")]
     ImageGenerator,
-    #[at("/shanten-calculator")]
+    #[at("/shanten_count/shanten-calculator")]
     ShantenCaluculator,
-    #[at("/")]
+    #[at("/shanten_count/")]
     Home,
 }
 
