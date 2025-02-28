@@ -201,12 +201,6 @@ impl FromStr for Hand {
             if ('0'..='9').contains(&n) {
                 let mut value = n.to_digit(10).unwrap() as u8;
 
-                if value == 0 {
-                    value = 5;
-                }
-
-                value -= 1;
-
                 let tile_type = (i + 1..length)
                     .map(|j| chars[j])
                     .filter(|&c| c == 'm' || c == 'p' || c == 's' || c == 'z')
@@ -227,6 +221,12 @@ impl FromStr for Hand {
                         }
                     }
                     c => {
+                        if value == 0 {
+                            value = 5;
+                        }
+
+                        value -= 1;
+
                         if value <= 9 {
                             match c {
                                 'm' => {
