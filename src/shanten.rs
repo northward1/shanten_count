@@ -3,7 +3,7 @@ use std::{
     str::FromStr,
 };
 
-use rustc_hash::FxHashMap;
+use rustc_hash::{FxHashMap, FxHashSet};
 
 #[derive(Default, PartialEq, Eq, Debug, PartialOrd, Ord, Hash, Clone)]
 pub struct Hand {
@@ -338,6 +338,7 @@ impl SuuhaiHand {
     pub fn calc_shanten_to_all_partly_pattern() -> FxHashMap<(Self, u8), u8> {
         let mut hash = FxHashMap::default();
         let mut q = std::collections::VecDeque::default();
+        let mut seen = FxHashSet::default();
 
         for partly_agari_pattern in Self::all_partly_agari_pattern() {
             let c = partly_agari_pattern.count();
@@ -346,6 +347,12 @@ impl SuuhaiHand {
         }
 
         while let Some((pattern, c)) = q.pop_front() {
+            if seen.contains(&(pattern.clone(), c)) {
+                continue;
+            }
+
+            seen.insert((pattern.clone(), c));
+
             let d = *hash.get(&(pattern.clone(), c)).unwrap();
 
             if pattern.count() < 14 {
@@ -363,6 +370,7 @@ impl SuuhaiHand {
                     if let Some(&prev_dist) = hash.get(&(next_pattern.clone(), c)) {
                         if prev_dist > d {
                             hash.insert((next_pattern.clone(), c), d);
+                            q.push_front((next_pattern, c));
                         }
                     } else {
                         hash.insert((next_pattern.clone(), c), d);
@@ -472,6 +480,7 @@ impl JihaiHand {
     pub fn calc_shanten_to_all_partly_pattern() -> FxHashMap<(Self, u8), u8> {
         let mut hash = FxHashMap::default();
         let mut q = std::collections::VecDeque::default();
+        let mut seen = FxHashSet::default();
 
         for partly_agari_pattern in Self::all_partly_agari_pattern() {
             let c = partly_agari_pattern.count();
@@ -480,6 +489,12 @@ impl JihaiHand {
         }
 
         while let Some((pattern, c)) = q.pop_front() {
+            if seen.contains(&(pattern.clone(), c)) {
+                continue;
+            }
+
+            seen.insert((pattern.clone(), c));
+
             let d = *hash.get(&(pattern.clone(), c)).unwrap();
 
             if pattern.count() < 14 {
@@ -497,6 +512,7 @@ impl JihaiHand {
                     if let Some(&prev_dist) = hash.get(&(next_pattern.clone(), c)) {
                         if prev_dist > d {
                             hash.insert((next_pattern.clone(), c), d);
+                            q.push_front((next_pattern, c));
                         }
                     } else {
                         hash.insert((next_pattern.clone(), c), d);
