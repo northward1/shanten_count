@@ -6,6 +6,8 @@ use yew::prelude::*;
 
 #[function_component(App)]
 fn app() -> Html {
+    SUUHAI_DICT.get_or_init(SuuhaiHand::calc_shanten_to_all_partly_pattern);
+
     html! {
         <>
         <ShantenCaluculator/>
@@ -169,7 +171,5 @@ fn shanten_calculator() -> Html {
 }
 
 fn main() {
-    SUUHAI_DICT.get_or_init(SuuhaiHand::calc_shanten_to_all_partly_pattern);
-
     yew::Renderer::<App>::new().render();
 }
