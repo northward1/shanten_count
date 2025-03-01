@@ -1,11 +1,13 @@
+use rustc_hash::{FxHashMap, FxHashSet};
+use std::sync::OnceLock;
 use std::{
     ops::{Index, IndexMut},
     str::FromStr,
 };
 
-use rustc_hash::{FxHashMap, FxHashSet};
+pub static SUUHAI_DICT: OnceLock<FxHashMap<(u32, u8), u8>> = OnceLock::new();
 
-#[derive(Default, PartialEq, Eq, Debug, PartialOrd, Ord, Hash, Clone)]
+#[derive(Default, PartialEq, Eq, Debug, PartialOrd, Ord, Clone)]
 pub struct Hand {
     m: SuuhaiHand,
     p: SuuhaiHand,
@@ -116,34 +118,41 @@ impl Hand {
         return 13 - 2 * toitsu_count - isolated_tile_count;
     }
 
-    pub fn shanten_standard(
-        &self,
-        suuhai_pattern_dict: &FxHashMap<(SuuhaiHand, u8), u8>,
-        jihai_pattern_dict: &FxHashMap<(JihaiHand, u8), u8>,
-    ) -> i8 {
+    pub fn shanten_standard(&self) -> i8 {
         let pattern = [0, 3, 6, 9, 12, 2, 5, 8, 11, 14];
 
-        let mut ret = i8::MAX;
+        let mut ret = 13;
         let has_toitsu = |k| if k % 3 == 2 { 1 } else { 0 };
+        let check = |c, k| if c >= 5 { k >= 2 } else { true } && c * 3 >= k;
 
         for mc in pattern {
+            if !check(self.m.count(), mc) {
+                continue;
+            }
+
             for sc in pattern {
+                if !check(self.s.count(), sc) {
+                    continue;
+                }
+
                 for pc in pattern {
+                    if !check(self.p.count(), pc) {
+                        continue;
+                    }
+
                     for jc in pattern {
+                        if !check(self.z.count(), jc) {
+                            continue;
+                        }
+
                         let toitsu_count =
                             has_toitsu(mc) + has_toitsu(sc) + has_toitsu(pc) + has_toitsu(jc);
 
                         if toitsu_count == 1 && mc + sc + pc + jc == 14 {
-                            let c = suuhai_pattern_dict
-                                .get(&(self.m.clone(), mc as u8))
-                                .unwrap()
-                                + suuhai_pattern_dict
-                                    .get(&(self.p.clone(), pc as u8))
-                                    .unwrap()
-                                + suuhai_pattern_dict
-                                    .get(&(self.s.clone(), sc as u8))
-                                    .unwrap()
-                                + jihai_pattern_dict.get(&(self.z.clone(), jc as u8)).unwrap();
+                            let c = SuuhaiHand::dist(&self.m, mc)
+                                + SuuhaiHand::dist(&self.s, sc)
+                                + SuuhaiHand::dist(&self.p, pc)
+                                + JihaiHand::dist(&self.z, jc);
 
                             ret = std::cmp::min(ret, c as i8 - 1);
                         }
@@ -153,6 +162,10 @@ impl Hand {
         }
 
         return ret;
+    }
+
+    pub fn count(&self) -> u8 {
+        self.m.count() + self.p.count() + self.s.count() + self.z.count()
     }
 }
 
@@ -254,7 +267,7 @@ impl FromStr for Hand {
 
 #[derive(Default, PartialEq, Eq, Debug, PartialOrd, Ord, Hash, Clone)]
 pub struct SuuhaiHand([u8; 9]);
-#[derive(Default, PartialEq, Eq, Debug, PartialOrd, Ord, Hash, Clone)]
+#[derive(Default, PartialEq, Eq, Debug, PartialOrd, Ord, Clone)]
 pub struct JihaiHand([u8; 7]);
 
 impl SuuhaiHand {
@@ -316,7 +329,7 @@ impl SuuhaiHand {
                                 }
                             }
 
-                            if hand.check() {
+                            if hand.check() && hand.count() > 0 {
                                 ret.push(hand);
                             }
                         }
@@ -335,16 +348,30 @@ impl SuuhaiHand {
         self.0.iter().sum::<u8>()
     }
 
-    pub fn calc_shanten_to_all_partly_pattern() -> FxHashMap<(Self, u8), u8> {
+    pub fn hash(&self) -> u32 {
+        let mut h = 0;
+        let mut e = 1;
+
+        for i in 0..Self::LENGTH {
+            h += self[i] as u32 * e;
+            e *= 5;
+        }
+
+        return h;
+    }
+
+    pub fn calc_shanten_to_all_partly_pattern() -> FxHashMap<(u32, u8), u8> {
         let mut hash = FxHashMap::default();
         let mut q = std::collections::VecDeque::default();
         let mut seen = FxHashSet::default();
 
         for partly_agari_pattern in Self::all_partly_agari_pattern() {
             let c = partly_agari_pattern.count();
-            hash.insert((partly_agari_pattern.clone(), c), 0);
+            hash.insert((partly_agari_pattern.hash(), c), 0);
             q.push_front((partly_agari_pattern, c));
         }
+
+        let check = |c, k| if c >= 5 { k >= 2 } else { true } && c * 3 >= k;
 
         while let Some((pattern, c)) = q.pop_front() {
             if seen.contains(&(pattern.clone(), c)) {
@@ -353,7 +380,7 @@ impl SuuhaiHand {
 
             seen.insert((pattern.clone(), c));
 
-            let d = *hash.get(&(pattern.clone(), c)).unwrap();
+            let d = *hash.get(&(pattern.hash(), c)).unwrap();
 
             if pattern.count() < 14 {
                 for i in 0..Self::LENGTH {
@@ -367,13 +394,17 @@ impl SuuhaiHand {
                         next_pattern
                     };
 
-                    if let Some(&prev_dist) = hash.get(&(next_pattern.clone(), c)) {
+                    if !check(next_pattern.count(), c) {
+                        continue;
+                    }
+
+                    if let Some(&prev_dist) = hash.get(&(next_pattern.hash(), c)) {
                         if prev_dist > d {
-                            hash.insert((next_pattern.clone(), c), d);
+                            hash.insert((next_pattern.hash(), c), d);
                             q.push_front((next_pattern, c));
                         }
                     } else {
-                        hash.insert((next_pattern.clone(), c), d);
+                        hash.insert((next_pattern.hash(), c), d);
                         q.push_front((next_pattern, c));
                     }
                 }
@@ -391,8 +422,12 @@ impl SuuhaiHand {
                         next_pattern
                     };
 
-                    if !hash.contains_key(&(next_pattern.clone(), c)) {
-                        hash.insert((next_pattern.clone(), c), d + 1);
+                    if !check(next_pattern.count(), c) {
+                        continue;
+                    }
+
+                    if !hash.contains_key(&(next_pattern.hash(), c)) {
+                        hash.insert((next_pattern.hash(), c), d + 1);
                         q.push_back((next_pattern, c));
                     }
                 }
@@ -400,6 +435,16 @@ impl SuuhaiHand {
         }
 
         return hash;
+    }
+
+    pub fn dist(&self, k: u8) -> u8 {
+        if k == 0 {
+            return 0;
+        }
+
+        SUUHAI_DICT.get_or_init(SuuhaiHand::calc_shanten_to_all_partly_pattern);
+
+        return *SUUHAI_DICT.get().unwrap().get(&(self.hash(), k)).unwrap();
     }
 }
 
@@ -410,138 +455,37 @@ impl JihaiHand {
         (0..Self::LENGTH).filter(|&i| self[i] > 4).next().is_none()
     }
 
-    pub fn all_partly_agari_pattern() -> Vec<Self> {
-        let mut ret = vec![];
-
-        let mut mentsu = vec![None];
-        let mut toitsu = vec![None];
-
-        for i in 0..Self::LENGTH {
-            mentsu.push(Some([i, i, i]));
-            toitsu.push(Some([i, i]));
-        }
-
-        for m1 in mentsu.iter() {
-            for m2 in mentsu.iter() {
-                for m3 in mentsu.iter() {
-                    for m4 in mentsu.iter() {
-                        for t1 in toitsu.iter() {
-                            let mut hand = Self::default();
-
-                            if let Some(m1) = m1 {
-                                for &t in m1 {
-                                    hand[t] += 1;
-                                }
-                            }
-
-                            if let Some(m2) = m2 {
-                                for &t in m2 {
-                                    hand[t] += 1;
-                                }
-                            }
-
-                            if let Some(m3) = m3 {
-                                for &t in m3 {
-                                    hand[t] += 1;
-                                }
-                            }
-
-                            if let Some(m4) = m4 {
-                                for &t in m4 {
-                                    hand[t] += 1;
-                                }
-                            }
-
-                            if let Some(t1) = t1 {
-                                for &t in t1 {
-                                    hand[t] += 1;
-                                }
-                            }
-
-                            if hand.check() {
-                                ret.push(hand);
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        ret.sort();
-        ret.dedup();
-
-        return ret;
-    }
-
     pub fn count(&self) -> u8 {
         self.0.iter().sum::<u8>()
     }
 
-    pub fn calc_shanten_to_all_partly_pattern() -> FxHashMap<(Self, u8), u8> {
-        let mut hash = FxHashMap::default();
-        let mut q = std::collections::VecDeque::default();
-        let mut seen = FxHashSet::default();
-
-        for partly_agari_pattern in Self::all_partly_agari_pattern() {
-            let c = partly_agari_pattern.count();
-            hash.insert((partly_agari_pattern.clone(), c), 0);
-            q.push_front((partly_agari_pattern, c));
+    pub fn dist(&self, k: u8) -> u8 {
+        if k == 0 {
+            return 0;
         }
 
-        while let Some((pattern, c)) = q.pop_front() {
-            if seen.contains(&(pattern.clone(), c)) {
-                continue;
-            }
+        let mentsu_count = k / 3;
+        let toitsu_count = if k % 3 == 2 { 1 } else { 0 };
 
-            seen.insert((pattern.clone(), c));
+        let mut counts = self.0.iter().map(|&v| v).collect::<Vec<_>>();
+        counts.sort();
+        counts.reverse();
 
-            let d = *hash.get(&(pattern.clone(), c)).unwrap();
+        let mut ret = 0;
 
-            if pattern.count() < 14 {
-                for i in 0..Self::LENGTH {
-                    if pattern[i] == 4 {
-                        continue;
-                    }
-
-                    let next_pattern = {
-                        let mut next_pattern = pattern.clone();
-                        next_pattern[i] += 1;
-                        next_pattern
-                    };
-
-                    if let Some(&prev_dist) = hash.get(&(next_pattern.clone(), c)) {
-                        if prev_dist > d {
-                            hash.insert((next_pattern.clone(), c), d);
-                            q.push_front((next_pattern, c));
-                        }
-                    } else {
-                        hash.insert((next_pattern.clone(), c), d);
-                        q.push_front((next_pattern, c));
-                    }
-                }
-            }
-
-            if pattern.count() > 0 {
-                for i in 0..Self::LENGTH {
-                    if pattern[i] == 0 {
-                        continue;
-                    }
-
-                    let next_pattern = {
-                        let mut next_pattern = pattern.clone();
-                        next_pattern[i] -= 1;
-                        next_pattern
-                    };
-
-                    if !hash.contains_key(&(next_pattern.clone(), c)) {
-                        hash.insert((next_pattern.clone(), c), d + 1);
-                        q.push_back((next_pattern, c));
-                    }
-                }
+        for i in 0..mentsu_count {
+            if counts[i as usize] < 3 {
+                ret += 3 - counts[i as usize];
             }
         }
 
-        return hash;
+        for i in mentsu_count..mentsu_count + toitsu_count {
+            if counts[i as usize] < 2 {
+                ret += 2 - counts[i as usize];
+            }
+        }
+
+        return ret;
     }
 }
 

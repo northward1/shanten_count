@@ -1,35 +1,16 @@
-use std::{str::FromStr, sync::OnceLock};
-
-use rustc_hash::FxHashMap;
-use shanten_count::shanten::{Hand, JihaiHand, SuuhaiHand};
+use shanten_count::shanten::{Hand, SUUHAI_DICT, SuuhaiHand};
+use std::str::FromStr;
 use wasm_bindgen::JsCast;
 use web_sys::{EventTarget, HtmlInputElement};
 use yew::prelude::*;
-use yew_router::prelude::*;
 
 #[function_component(App)]
 fn app() -> Html {
     html! {
-        <BrowserRouter>
-            <Switch<Route> render={switch}/>
-        </BrowserRouter>
-    }
-}
-
-fn switch(routes: Route) -> Html {
-    match routes {
-        Route::Home => html! {<Home/>},
-        Route::ImageGenerator => html! {<ImageGenerator/>},
-        Route::ShantenCaluculator => html! {<ShantenCaluculator/>},
-    }
-}
-
-#[function_component(Home)]
-fn home() -> Html {
-    html! {
         <>
-            <Link<Route> to={Route::ImageGenerator}>{"牌姿生成"}</Link<Route>> <br/>
-            <Link<Route> to={Route::ShantenCaluculator}>{"シャンテン数計算"}</Link<Route>>
+        <ShantenCaluculator/>
+        <br/>
+        <ImageGenerator/>
         </>
     }
 }
@@ -55,15 +36,19 @@ fn image_generator() -> Html {
 
     html! {
         <>
-            <input
+            {"牌姿生成:"}<input size="30"
                 onchange={on_change}
                 value={input_value.clone()}
             />
             <br/>
+            {"?: ?の牌を表示します"}
             <br/>
+            {"_: 裏向きの牌を表示します"}
+            <br/>
+            {"空白を入れると次の牌は少し間隔を空けて表示します"}
             <div>
             {parse_input(&input_value.clone()).iter().map(|p|
-                html! {<img src={p.clone()} width=90 height=120/>}
+                if p == "images/empty.png" {html! {<img src={p.clone()}/>}} else {html! {<img src={p.clone()} width=90 height=120/>}}
             ).collect::<Html>()}
             </div>
         </>
@@ -81,6 +66,8 @@ fn parse_input(input: &str) -> Vec<String> {
             tiles.push("images/blank.png".to_string());
         } else if chars[i] == '_' {
             tiles.push("images/back.png".to_string());
+        } else if chars[i] == ' ' {
+            tiles.push("images/empty.png".to_string());
         } else {
             let c = chars[i];
 
@@ -116,28 +103,25 @@ fn parse_input(input: &str) -> Vec<String> {
     return tiles;
 }
 
-static SUUHAI_DICT: OnceLock<FxHashMap<(SuuhaiHand, u8), u8>> = OnceLock::new();
-static JIHAI_DICT: OnceLock<FxHashMap<(JihaiHand, u8), u8>> = OnceLock::new();
-
 fn shanten_info_text(input: &str) -> Html {
-    SUUHAI_DICT.get_or_init(SuuhaiHand::calc_shanten_to_all_partly_pattern);
-    JIHAI_DICT.get_or_init(JihaiHand::calc_shanten_to_all_partly_pattern);
-
     let shanten_count_text;
     let hand = Hand::from_str(input);
 
     if hand.is_ok() {
         let hand = hand.unwrap();
 
-        let standard_shanten =
-            hand.shanten_standard(&SUUHAI_DICT.get().unwrap(), &JIHAI_DICT.get().unwrap());
-        let chiitoitsu_shanten = hand.shanten_chiitoitsu();
-        let kokushi_shanten = hand.shanten_kokushimusou();
+        if hand.count() >= 13 {
+            let standard_shanten = hand.shanten_standard();
+            let chiitoitsu_shanten = hand.shanten_chiitoitsu();
+            let kokushi_shanten = hand.shanten_kokushimusou();
 
-        shanten_count_text = format!(
-            "一般形: {}, 七対子: {}, 国士無双: {}",
-            standard_shanten, chiitoitsu_shanten, kokushi_shanten
-        );
+            shanten_count_text = format!(
+                "一般形: {}, 七対子: {}, 国士無双: {}",
+                standard_shanten, chiitoitsu_shanten, kokushi_shanten
+            );
+        } else {
+            shanten_count_text = format!("Not enough tiles.");
+        }
     } else {
         shanten_count_text = format!("Failed to parse.");
     }
@@ -166,12 +150,14 @@ fn shanten_calculator() -> Html {
 
     html! {
         <>
-            <input
+            {"シャンテン数計算機:"}<input size="30"
                 onchange={on_change}
                 value={input_value.clone()}
             />
             <br/>
-            {shanten_info_text(&input_value)}
+            {"mpsz形式で入力できます。13枚か14枚あるときに結果を計算できます。"}
+            <br/>
+            {"結果:"}{shanten_info_text(&input_value)}
             <br/>
             <div>
             {parse_input(&input_value).iter().map(|p|
@@ -182,16 +168,8 @@ fn shanten_calculator() -> Html {
     }
 }
 
-#[derive(Routable, Clone, PartialEq)]
-enum Route {
-    #[at("/image-generator")]
-    ImageGenerator,
-    #[at("/shanten-calculator")]
-    ShantenCaluculator,
-    #[at("/")]
-    Home,
-}
-
 fn main() {
+    SUUHAI_DICT.get_or_init(SuuhaiHand::calc_shanten_to_all_partly_pattern);
+
     yew::Renderer::<App>::new().render();
 }
