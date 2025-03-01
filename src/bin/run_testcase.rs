@@ -1,14 +1,11 @@
 use proconio::{fastout, input};
-use shanten_count::shanten::{Hand, JihaiHand, SuuhaiHand};
+use shanten_count::shanten::Hand;
 
 #[fastout]
 fn main() {
     input! {
         n: usize,
     }
-
-    let suuhai_hash = SuuhaiHand::calc_shanten_to_all_partly_pattern();
-    let jihai_hash = JihaiHand::calc_shanten_to_all_partly_pattern();
 
     for _ in 0..n {
         input! {
@@ -21,7 +18,7 @@ fn main() {
             h[t] += 1;
         }
 
-        let s0 = h.shanten_standard(&suuhai_hash, &jihai_hash);
+        let s0 = h.shanten_standard();
         let s1 = h.shanten_kokushimusou();
         let s2 = h.shanten_chiitoitsu();
 
